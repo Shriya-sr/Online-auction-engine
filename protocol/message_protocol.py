@@ -32,6 +32,10 @@ def create_auction_end(winner, amount):
     return f"AUCTION_END {winner} {amount}"
 
 
+def create_error_message(message):
+    return f"ERROR {message}"
+
+
 # ---- Message Parsing Function ----
 
 def parse_message(message):
@@ -46,30 +50,66 @@ def parse_message(message):
     command = parts[0]
 
     if command == "JOIN":
+        if len(parts) != 2:
+            return {"type": "INVALID", "error": "JOIN requires exactly one username", "raw": message}
         return {"type": "JOIN", "user_id": parts[1]}
 
     elif command == "BID":
-        return {"type": "BID", "amount": int(parts[1])}
+        if len(parts) != 2:
+            return {"type": "INVALID", "error": "BID requires exactly one amount", "raw": message}
+        try:
+            amount = int(parts[1])
+        except ValueError:
+            return {"type": "INVALID", "error": "BID amount must be an integer", "raw": message}
+
+        return {"type": "BID", "amount": amount}
 
     elif command == "BID_UPDATE":
+        if len(parts) != 3:
+            return {"type": "INVALID", "error": "BID_UPDATE requires amount and bidder", "raw": message}
+        try:
+            amount = int(parts[1])
+        except ValueError:
+            return {"type": "INVALID", "error": "BID_UPDATE amount must be an integer", "raw": message}
+
         return {
             "type": "BID_UPDATE",
-            "amount": int(parts[1]),
+            "amount": amount,
             "bidder": parts[2]
         }
 
     elif command == "TIE_START":
-        return {"type": "TIE_START", "duration": int(parts[1])}
+        if len(parts) != 2:
+            return {"type": "INVALID", "error": "TIE_START requires duration", "raw": message}
+        try:
+            duration = int(parts[1])
+        except ValueError:
+            return {"type": "INVALID", "error": "TIE_START duration must be an integer", "raw": message}
+        return {"type": "TIE_START", "duration": duration}
 
     elif command == "TIE_END":
+        if len(parts) != 1:
+            return {"type": "INVALID", "error": "TIE_END takes no arguments", "raw": message}
         return {"type": "TIE_END"}
 
     elif command == "AUCTION_END":
+        if len(parts) != 3:
+            return {"type": "INVALID", "error": "AUCTION_END requires winner and amount", "raw": message}
+        try:
+            amount = int(parts[2])
+        except ValueError:
+            return {"type": "INVALID", "error": "AUCTION_END amount must be an integer", "raw": message}
+
         return {
             "type": "AUCTION_END",
             "winner": parts[1],
-            "amount": int(parts[2])
+            "amount": amount
         }
+
+    elif command == "ERROR":
+        if len(parts) < 2:
+            return {"type": "INVALID", "error": "ERROR requires a message", "raw": message}
+        return {"type": "ERROR", "message": " ".join(parts[1:])}
 
     else:
         return {"type": "UNKNOWN", "raw": message}

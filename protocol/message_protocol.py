@@ -42,6 +42,7 @@ def parse_message(message):
     """
     Parses incoming messages into structured components.
     """
+    # incoming message is parsed
     parts = message.strip().split()
 
     if not parts:
@@ -49,6 +50,7 @@ def parse_message(message):
 
     command = parts[0]
 
+    # A dictionary of sorts created, based on keyword by user
     if command == "JOIN":
         if len(parts) != 2:
             return {"type": "INVALID", "error": "JOIN requires exactly one username", "raw": message}
@@ -64,6 +66,7 @@ def parse_message(message):
 
         return {"type": "BID", "amount": amount}
 
+# if existing bidder is updating his bid amount
     elif command == "BID_UPDATE":
         if len(parts) != 3:
             return {"type": "INVALID", "error": "BID_UPDATE requires amount and bidder", "raw": message}
@@ -113,3 +116,5 @@ def parse_message(message):
 
     else:
         return {"type": "UNKNOWN", "raw": message}
+    
+    # tie start and toe end to be implpemented such that it calls Ahana's function

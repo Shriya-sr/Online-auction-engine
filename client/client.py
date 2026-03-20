@@ -1,14 +1,15 @@
 import socket
-import sys
-import threading
+import sys      # system-specific parameters and functions.     
+import threading  #for concurrency
 import time
-from pathlib import Path
+from pathlib import Path   
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from protocol.message_protocol import create_bid_message, create_join_message, parse_message
+# Custom module for creating and parsing protocol messages
 
 HOST = "127.0.0.1"
 PORT = 5000
@@ -27,7 +28,7 @@ def run_countdown(seconds):
     """
     for remaining in range(seconds, 0, -1):
         print(f"Auction event ends in {remaining:2d}s", end="\r")
-        time.sleep(1)
+        time.sleep(1)    # is this required here?
     print(" " * 40, end="\r")
 
 
@@ -152,3 +153,6 @@ def start_client():
 
 if __name__ == "__main__":
     start_client()
+
+
+

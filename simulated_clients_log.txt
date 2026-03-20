@@ -1,0 +1,35 @@
+[2026-03-18 22:55:27] A joined the auction.
+[2026-03-18 22:55:27] B joined the auction.
+[2026-03-18 22:55:27] C joined the auction.
+[2026-03-18 22:55:27] D joined the auction.
+[2026-03-18 22:55:27] E joined the auction.
+[2026-03-18 22:55:28] A placed bid 100 (round=0)
+[2026-03-18 22:55:28] C placed bid 200 (round=0)
+[2026-03-18 22:55:28] E placed bid 250 (round=0)
+[2026-03-18 22:55:28] B placed bid 90 (round=0)
+[2026-03-18 22:55:28] D placed bid 200 (round=0)
+[2026-03-18 22:55:28] A received: SERVER: A joined the auction. Total participants: 1
+[2026-03-18 22:55:28] C received: SERVER: C joined the auction. Total participants: 3
+[2026-03-18 22:55:28] B received: SERVER: B joined the auction. Total participants: 2
+[2026-03-18 22:55:28] D received: SERVER: D joined the auction. Total participants: 4
+[2026-03-18 22:55:28] E received: SERVER: E joined the auction. Total participants: 5
+[2026-03-18 22:55:28] A received: SERVER: B joined the auction. Total participants: 2
+[2026-03-18 22:55:28] B received: SERVER: C joined the auction. Total participants: 3
+[2026-03-18 22:55:28] C received: SERVER: D joined the auction. Total participants: 4
+[2026-03-18 22:55:28] A received: SERVER: C joined the auction. Total participants: 3
+[2026-03-18 22:55:28] D received: SERVER: E joined the auction. Total participants: 5
+[2026-03-18 22:55:28] B received: SERVER: D joined the auction. Total participants: 4
+[2026-03-18 22:55:28] C received: SERVER: E joined the auction. Total participants: 5
+[2026-03-18 22:55:28] A received: SERVER: D joined the auction. Total participants: 4
+[2026-03-18 22:55:28] B received: SERVER: E joined the auction. Total participants: 5
+[2026-03-18 22:55:28] A received: SERVER: E joined the auction. Total participants: 5
+[2026-03-18 22:55:29] E left the auction.
+[2026-03-18 22:55:29] D left the auction.
+[2026-03-18 22:55:29] C left the auction.
+[2026-03-18 22:55:29] B placed bid 150 (round=1)
+[2026-03-18 22:55:29] B received: BID_UPDATE 250 E
+[2026-03-18 22:55:29] A left the auction.
+[2026-03-18 22:55:29] B received: TIE DETECTED: A and E both bid 100 | 5-SEC ESCALATION STARTED
+[2026-03-18 22:55:29] B received: BID_UPDATE 250 E
+[2026-03-18 22:55:29] B received: ERROR Bid rejected
+[2026-03-18 22:55:30] B left the auction.

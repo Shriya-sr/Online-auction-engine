@@ -1347,3 +1347,42 @@
 [2026-03-18 22:55:53] | 22:55:28 | D | 200 | REJECTED |
 [2026-03-18 22:55:53] | 22:55:28 | B | 90 | REJECTED |
 [2026-03-18 22:55:53] | 22:55:29 | B | 150 | ESCALATION_REJECTED |
+[2026-03-22 10:41:40] AUCTION START | Item: Rare Painting | Base Price: 100
+[2026-03-22 10:42:23] SERVER: C joined the auction. Total participants: 1
+[2026-03-22 10:42:23] SERVER: B joined the auction. Total participants: 2
+[2026-03-22 10:42:23] SERVER: A joined the auction. Total participants: 3
+[2026-03-22 10:42:23] SERVER: D joined the auction. Total participants: 4
+[2026-03-22 10:42:23] SERVER: E joined the auction. Total participants: 5
+[2026-03-22 10:42:24] BID: A bid 100 at 10:42:24 (REJECTED)
+[2026-03-22 10:42:24] BID: B bid 90 at 10:42:24 (REJECTED)
+[2026-03-22 10:42:24] BID: D bid 200 at 10:42:24 (REJECTED)
+[2026-03-22 10:42:24] BID: C bid 200 at 10:42:24 (REJECTED)
+[2026-03-22 10:42:25] BID: B bid 150 at 10:42:25 (REJECTED)
+[2026-03-22 10:42:40] AUCTION ENDED | Winner: E | Bid: 250 | Item: Rare Painting | Participants: D, C, B, E, A
+[2026-03-22 10:42:40] BID HISTORY:
+[2026-03-22 10:42:40] | Time | User | Bid Amount | Result |
+[2026-03-22 10:42:40] | 10:42:24 | E | 250 | ACCEPTED |
+[2026-03-22 10:42:40] | 10:42:24 | A | 100 | REJECTED |
+[2026-03-22 10:42:40] | 10:42:24 | B | 90 | REJECTED |
+[2026-03-22 10:42:40] | 10:42:24 | D | 200 | REJECTED |
+[2026-03-22 10:42:40] | 10:42:24 | C | 200 | REJECTED |
+[2026-03-22 10:42:40] | 10:42:25 | B | 150 | REJECTED |
+[2026-03-22 17:39:00] SERVER: alice joined the auction. Total participants: 1
+[2026-03-22 17:39:00] SERVER: bob joined the auction. Total participants: 2
+[2026-03-22 17:39:00] SERVER: carol joined the auction. Total participants: 3
+[2026-03-22 17:39:00] BID: bob bid 150 at 17:39:00 (ACCEPTED)
+[2026-03-22 17:39:00] SERVER: b joined the auction. Total participants: 5
+[2026-03-22 17:39:00] BID: a bid 200 at 17:39:00 (ACCEPTED)
+[2026-03-22 17:39:00] BID: b bid 200 at 17:39:00 (TIE)
+[2026-03-22 17:39:00] TIE DETECTED: b and a both bid 200 | 5-SEC ESCALATION STARTED
+[2026-03-22 17:39:00] SERVER: userA joined the auction. Total participants: 6
+[2026-03-22 17:39:00] SERVER: userB joined the auction. Total participants: 7
+[2026-03-22 17:39:32] AUCTION START | Item: Rare Painting | Base Price: 100
+[2026-03-22 17:39:47] SERVER: A joined the auction. Total participants: 2
+[2026-03-22 17:39:47] SERVER: C joined the auction. Total participants: 3
+[2026-03-22 17:39:47] SERVER: D joined the auction. Total participants: 4
+[2026-03-22 17:39:47] SERVER: E joined the auction. Total participants: 5
+[2026-03-22 17:39:48] BID: E bid 250 at 17:39:48 (ACCEPTED)
+[2026-03-22 17:39:48] BID: A bid 100 at 17:39:48 (REJECTED)
+[2026-03-22 17:39:48] BID: C bid 200 at 17:39:48 (REJECTED)
+[2026-03-22 17:39:48] BID: D bid 200 at 17:39:48 (REJECTED)

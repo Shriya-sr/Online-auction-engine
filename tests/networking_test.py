@@ -144,7 +144,7 @@ class NetworkingIntegrationTests(unittest.TestCase):
         self.assert_eventually_contains(client_b, "BID_UPDATE 150 bob")
         self.assert_eventually_contains(client_c, "BID_UPDATE 150 bob")
 
-    def test_rejects_non_increasing_bid(self):
+    def test_equal_bid_triggers_tie_escalation(self):
         client_a = self.add_client()
         client_b = self.add_client()
 
@@ -155,7 +155,8 @@ class NetworkingIntegrationTests(unittest.TestCase):
         self.assert_eventually_contains(client_a, "BID_UPDATE 200 a")
 
         client_b.bid(200)
-        self.assert_eventually_contains(client_b, "ERROR Bid must be greater than current highest bid")
+        self.assert_eventually_contains(client_a, "TIE DETECTED")
+        self.assert_eventually_contains(client_b, "TIE DETECTED")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -105,9 +105,9 @@ class AuctionUIClient:
             return
 
         try:
-            context = ssl.create_default_context()
+            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            context.load_verify_locations(cafile='server.crt')
             context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
 
             raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock = context.wrap_socket(raw_sock, server_hostname=host)

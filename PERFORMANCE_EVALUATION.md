@@ -32,17 +32,17 @@ This document is intended for rubric component: Performance Evaluation (response
 ## Results Table Template
 | Scenario | Clients | Avg Response Time (ms) | Throughput (bids/s) | Notes |
 |---|---:|---:|---:|---|
-| Baseline | 1 | 8.4 | 45.2 | Stable, near-instant acknowledgement under single client load |
-| Moderate | 5 | 22.7 | 112.6 | Expected latency increase; server remained stable |
-| High | 10 | 49.6 | 171.3 | Higher contention and broadcast overhead visible |
-| Tie-heavy | 5 | 61.3 | 88.4 | Escalation logic adds processing and synchronization overhead |
-| Invalid-input stress | 5 | 18.9 | 96.7 | Invalid commands rejected quickly; valid bids still processed |
+| Baseline | 1 | 6.25 | 91.91 | Stable under single client load |
+| Moderate | 5 | 15.74 | 206.23 | Latency rises under concurrent bidders |
+| High | 10 | 36.19 | 187.06 | Contention and broadcast overhead are more visible |
+| Tie-heavy | 5 | 6.45 | 511.72 | Fast reject/quick-path responses during escalation |
+| Invalid-input stress | 5 | 2.38 | 412.77 | Invalid commands rejected quickly; valid bids still processed |
 
 ## Observations
-- Response time scales acceptably from 1 to 10 clients, with the largest jump at high concurrency due to contention on shared state and broadcast fan-out.
-- Throughput improves with concurrency up to 10 clients for normal bidding workloads, then begins to plateau due to synchronization and per-client send costs.
-- Tie-heavy scenarios reduce throughput and increase latency because escalation bookkeeping and tie-break resolution add extra work.
-- Invalid-input stress does not destabilize the server; rejects are fast and do not block subsequent valid bids.
+- Response time increases from baseline to moderate and rises further at high load, consistent with shared-state contention and broadcast fan-out.
+- Throughput improves from baseline to moderate, then decreases at high load due to synchronization and message fan-out overhead.
+- Tie-heavy workload shows lower latency and higher throughput in this run because several requests are processed through fast escalation-reject paths.
+- Invalid-input stress remains stable; invalid requests are rejected quickly and valid bids continue to be processed.
 - Primary bottlenecks observed: broadcast overhead, lock contention around shared state updates, and GUI client processing under bursty updates.
 
 ## Optimization/Fixes Applied
@@ -53,3 +53,5 @@ This document is intended for rubric component: Performance Evaluation (response
 
 ## Conclusion
 The system meets mini-project performance expectations for secure multi-client auction behavior on localhost and remains stable under normal, concurrent, tie-heavy, and invalid-input workloads. Performance degrades predictably with contention, but no failure mode was observed in these scenarios. Further improvements can be achieved by optimizing broadcast paths, reducing lock scope where safe, and using lightweight load clients for higher-scale benchmarking.
+
+Note: The above values are from the single localhost run captured in the latest `RAW_RESULTS_JSON` output. For final report rigor, repeat each scenario three times and report mean and standard deviation.

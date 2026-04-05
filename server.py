@@ -15,6 +15,10 @@ class AuctionServer:
         self.clients_lock = threading.Lock()
         self.usernames = set()
         self.usernames_lock = threading.Lock()
+        self.recv_timeout_seconds = 5.0
+        self.client_idle_timeout_seconds = 180.0
+        self.admin_idle_timeout_seconds = 300.0
+        self.max_line_bytes = 16384
         
         # Create SSL context and wrap socket
         if use_ssl:
@@ -80,7 +84,17 @@ class AuctionServer:
 
             # Check if auction time has expired
             state = self.auction.get_state()
-            if state['auction_active'] and state['end_time'] and time.time() >= state['end_time']:
+            now = time.time()
+            if (
+                state['auction_active']
+                and state['tie_active']
+                and state['escalation_end_time']
+                and now < state['escalation_end_time']
+            ):
+                time.sleep(0.1)
+                continue
+
+            if state['auction_active'] and state['end_time'] and now >= state['end_time']:
                 # End the auction
                 final_bid, final_bidder = self.auction.end_auction()
                 
@@ -104,6 +118,20 @@ class AuctionServer:
             return False
         return True
 
+    def _recv_line(self, sock, recv_buffer):
+        """Read one newline-delimited message with buffering for TCP framing."""
+        while b'\n' not in recv_buffer:
+            chunk = sock.recv(4096)
+            if not chunk:
+                return None, recv_buffer
+            recv_buffer += chunk
+            if len(recv_buffer) > self.max_line_bytes:
+                raise ValueError("Incoming message too large")
+
+        raw_line, recv_buffer = recv_buffer.split(b'\n', 1)
+        line = raw_line.decode('utf-8', errors='replace').strip()
+        return line, recv_buffer
+
     def _active_usernames(self):
         with self.usernames_lock:
             return sorted(list(self.usernames))
@@ -124,17 +152,31 @@ class AuctionServer:
 
     def handle_admin_client(self, admin_socket, admin_address):
         try:
+            admin_socket.settimeout(self.recv_timeout_seconds)
+            last_activity = time.time()
+            recv_buffer = b""
+
             def send_admin(message):
                 admin_socket.sendall(message.encode('utf-8'))
 
             send_admin("CONNECTED TO ADMIN PORTAL\n")
 
             while True:
-                data = admin_socket.recv(4096)
-                if not data:
+                try:
+                    raw, recv_buffer = self._recv_line(admin_socket, recv_buffer)
+                except socket.timeout:
+                    if time.time() - last_activity >= self.admin_idle_timeout_seconds:
+                        print(f"Admin portal idle timeout {admin_address}")
+                        break
+                    continue
+                except ValueError as exc:
+                    print(f"Admin portal protocol error {admin_address}: {exc}")
                     break
 
-                raw = data.decode('utf-8').strip()
+                if raw is None:
+                    break
+
+                last_activity = time.time()
                 if not raw:
                     continue
 
@@ -200,6 +242,10 @@ class AuctionServer:
         """Handle communication with a single client."""
         username = None
         try:
+            client_socket.settimeout(self.recv_timeout_seconds)
+            last_activity = time.time()
+            recv_buffer = b""
+
             # Request username with JOIN command
             client_entry = None
             initial_entry = {'socket': client_socket, 'send_lock': threading.Lock()}
@@ -226,11 +272,25 @@ class AuctionServer:
             
             # Keep asking for valid username until successful
             while not username:
-                data = client_socket.recv(1024).decode('utf-8').strip()
+                try:
+                    data, recv_buffer = self._recv_line(client_socket, recv_buffer)
+                except socket.timeout:
+                    if time.time() - last_activity >= self.client_idle_timeout_seconds:
+                        self._send_client(initial_entry, "ERROR Connection closed due to inactivity\n")
+                        return
+                    continue
+                except ValueError:
+                    self._send_client(initial_entry, "ERROR Incoming message too large\n")
+                    return
+
+                last_activity = time.time()
                 
-                if not data:
+                if data is None:
                     self._send_client(initial_entry, "Invalid input. Disconnecting.\n")
                     return
+
+                if not data:
+                    continue
                 
                 command = data.split(maxsplit=1)
                 
@@ -286,10 +346,24 @@ class AuctionServer:
             
             # Handle client commands
             while True:
-                data = client_socket.recv(1024).decode('utf-8').strip()
-                
-                if not data:
+                try:
+                    data, recv_buffer = self._recv_line(client_socket, recv_buffer)
+                except socket.timeout:
+                    if time.time() - last_activity >= self.client_idle_timeout_seconds:
+                        self._send_client(client_entry, "ERROR Connection closed due to inactivity\n")
+                        break
+                    continue
+                except ValueError:
+                    self._send_client(client_entry, "ERROR Incoming message too large\n")
                     break
+
+                last_activity = time.time()
+                
+                if data is None:
+                    break
+
+                if not data:
+                    continue
                 
                 command = data.split()
                 if not command:

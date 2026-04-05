@@ -13,6 +13,7 @@ class Auction:
         escalation_window_seconds=5,
         anti_sniping_window_seconds=5,
         anti_sniping_extension_seconds=5,
+        anti_sniping_max_total_extension_seconds=30,
         state_file=None,
     ):
         self.item = item
@@ -26,6 +27,8 @@ class Auction:
         self.escalation_window_seconds = escalation_window_seconds
         self.anti_sniping_window_seconds = anti_sniping_window_seconds
         self.anti_sniping_extension_seconds = anti_sniping_extension_seconds
+        self.anti_sniping_max_total_extension_seconds = anti_sniping_max_total_extension_seconds
+        self.original_end_time = None
 
         self.leading_bidders = set()
         self.escalation_active = False
@@ -64,6 +67,8 @@ class Auction:
             "escalation_window_seconds": self.escalation_window_seconds,
             "anti_sniping_window_seconds": self.anti_sniping_window_seconds,
             "anti_sniping_extension_seconds": self.anti_sniping_extension_seconds,
+            "anti_sniping_max_total_extension_seconds": self.anti_sniping_max_total_extension_seconds,
+            "original_end_time": self.original_end_time,
         }
 
     def _persist_state(self):
@@ -85,6 +90,7 @@ class Auction:
             self.highest_bidder = data.get("highest_bidder")
             self.auction_active = bool(data.get("auction_active", False))
             self.end_time = data.get("end_time")
+            self.original_end_time = data.get("original_end_time", self.end_time)
             self.escalation_active = bool(data.get("escalation_active", False))
             self.escalation_end_time = data.get("escalation_end_time")
             self.escalation_blind_bids = {}
@@ -113,10 +119,23 @@ class Auction:
             self.escalation_window_seconds = int(
                 data.get("escalation_window_seconds", self.escalation_window_seconds)
             )
+            self.anti_sniping_window_seconds = int(
+                data.get("anti_sniping_window_seconds", self.anti_sniping_window_seconds)
+            )
+            self.anti_sniping_extension_seconds = int(
+                data.get("anti_sniping_extension_seconds", self.anti_sniping_extension_seconds)
+            )
+            self.anti_sniping_max_total_extension_seconds = int(
+                data.get(
+                    "anti_sniping_max_total_extension_seconds",
+                    self.anti_sniping_max_total_extension_seconds,
+                )
+            )
         except Exception:
             # Start with in-memory defaults if persisted state is invalid.
             self.auction_active = False
             self.end_time = None
+            self.original_end_time = None
             self.escalation_active = False
             self.escalation_end_time = None
             self.escalation_blind_bids = {}
@@ -139,7 +158,8 @@ class Auction:
             self.highest_bid = 0.0
             self.highest_bidder = None
             self.auction_active = True
-            self.end_time = time.time() + duration
+            self.original_end_time = time.time() + duration
+            self.end_time = self.original_end_time
             self.escalation_active = False
             self.escalation_end_time = None
             self.escalation_blind_bids = {}
@@ -166,11 +186,24 @@ class Auction:
         return (2.0 * stats["wins"]) + (0.1 * stats["valid_bids"])
 
     def _maybe_extend_timer(self, now):
+        if self.end_time is None or self.original_end_time is None:
+            return False
+
         time_left = self.end_time - now
-        if time_left <= self.anti_sniping_window_seconds:
-            self.end_time += self.anti_sniping_extension_seconds
-            return True
-        return False
+        if time_left > self.anti_sniping_window_seconds:
+            return False
+
+        max_end_time = self.original_end_time + self.anti_sniping_max_total_extension_seconds
+        if self.end_time >= max_end_time:
+            return False
+
+        remaining_extension = max_end_time - self.end_time
+        applied_extension = min(self.anti_sniping_extension_seconds, remaining_extension)
+        if applied_extension <= 0:
+            return False
+
+        self.end_time += applied_extension
+        return True
 
     def _start_escalation(self, now):
         if not self.escalation_active:
@@ -245,6 +278,33 @@ class Auction:
             "reason": reason,
         }
 
+    def _normalize_phase_locked(self, now):
+        if not self.auction_active:
+            return
+
+        if self.escalation_active:
+            # Finalize escalation as soon as its window ends.
+            self._finalize_escalation_locked(now, force=False)
+
+        if self.escalation_active and self.escalation_end_time and self.end_time:
+            # Keep auction end aligned with escalation end while escalation is active.
+            if self.end_time < self.escalation_end_time:
+                self.end_time = self.escalation_end_time
+                self._persist_state()
+
+    def _end_auction_locked(self):
+        if self.escalation_active:
+            self._finalize_escalation_locked(time.time(), force=True)
+
+        self.auction_active = False
+        self.end_time = None
+        self.original_end_time = None
+        if self.highest_bidder:
+            self._ensure_bidder(self.highest_bidder)
+            self.reputation[self.highest_bidder]["wins"] += 1
+        self._persist_state()
+        return self.highest_bid, self.highest_bidder
+
     def place_bid(self, amount, bidder):
         with self.lock:
             if not self.auction_active:
@@ -258,6 +318,19 @@ class Auction:
                 }
 
             now = time.time()
+            self._normalize_phase_locked(now)
+
+            if self.end_time and now >= self.end_time:
+                self._end_auction_locked()
+                return {
+                    "accepted": False,
+                    "reason": "Auction ended before bid could be processed",
+                    "highest_bid": self.highest_bid,
+                    "highest_bidder": self.highest_bidder,
+                    "tie": False,
+                    "timer_extended": False,
+                }
+
             self._ensure_bidder(bidder)
 
             if self.escalation_active:
@@ -411,16 +484,7 @@ class Auction:
 
     def end_auction(self):
         with self.lock:
-            if self.escalation_active:
-                self._finalize_escalation_locked(time.time(), force=True)
-
-            self.auction_active = False
-            self.end_time = None
-            if self.highest_bidder:
-                self._ensure_bidder(self.highest_bidder)
-                self.reputation[self.highest_bidder]["wins"] += 1
-            self._persist_state()
-            return self.highest_bid, self.highest_bidder
+            return self._end_auction_locked()
 
     def is_active(self):
         with self.lock:

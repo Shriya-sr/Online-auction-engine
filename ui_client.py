@@ -1,0 +1,357 @@
+import queue
+import socket
+import ssl
+import threading
+import tkinter as tk
+from tkinter import messagebox
+
+
+class AuctionUIClient:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Auction Bidder")
+        self.root.geometry("700x460")
+
+        self.sock = None
+        self.connected = False
+        self.joined = False
+        self.msg_queue = queue.Queue()
+
+        self._build_ui()
+        self.root.after(100, self._poll_messages)
+
+    def _build_ui(self):
+        top = tk.Frame(self.root, padx=10, pady=10)
+        top.pack(fill=tk.X)
+
+        tk.Label(top, text="Host").grid(row=0, column=0, sticky="w")
+        self.host_var = tk.StringVar(value="localhost")
+        tk.Entry(top, textvariable=self.host_var, width=20).grid(row=0, column=1, padx=4)
+
+        tk.Label(top, text="Port").grid(row=0, column=2, sticky="w")
+        self.port_var = tk.StringVar(value="5000")
+        tk.Entry(top, textvariable=self.port_var, width=8).grid(row=0, column=3, padx=4)
+
+        tk.Label(top, text="Username").grid(row=0, column=4, sticky="w")
+        self.username_var = tk.StringVar(value="bidder1")
+        tk.Entry(top, textvariable=self.username_var, width=16).grid(row=0, column=5, padx=4)
+
+        self.connect_btn = tk.Button(top, text="Connect", command=self.connect)
+        self.connect_btn.grid(row=0, column=6, padx=6)
+
+        self.join_btn = tk.Button(top, text="Join Auction", command=self.join_auction, state=tk.DISABLED)
+        self.join_btn.grid(row=0, column=7, padx=6)
+
+        self.disconnect_btn = tk.Button(top, text="Disconnect", command=self.disconnect, state=tk.DISABLED)
+        self.disconnect_btn.grid(row=0, column=8)
+
+        status = tk.Frame(self.root, padx=10, pady=4)
+        status.pack(fill=tk.X)
+
+        self.highest_var = tk.StringVar(value="Highest Bid: --")
+        self.timer_var = tk.StringVar(value="Time Left: --")
+        self.item_var = tk.StringVar(value="Item: --")
+        self.base_price_var = tk.StringVar(value="Base Price: --")
+        self.escalation_var = tk.StringVar(value="Escalation: --")
+        self.auction_state_var = tk.StringVar(value="Auction: --")
+        self.participants_var = tk.StringVar(value="Participants: --")
+        tk.Label(status, textvariable=self.highest_var, font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(status, textvariable=self.timer_var, font=("Segoe UI", 10)).pack(anchor="w")
+        tk.Label(status, textvariable=self.item_var, font=("Segoe UI", 10)).pack(anchor="w")
+        tk.Label(status, textvariable=self.base_price_var, font=("Segoe UI", 10)).pack(anchor="w")
+        tk.Label(status, textvariable=self.escalation_var, font=("Segoe UI", 10)).pack(anchor="w")
+        tk.Label(status, textvariable=self.participants_var, font=("Segoe UI", 10)).pack(anchor="w")
+        tk.Label(status, textvariable=self.auction_state_var, font=("Segoe UI", 10)).pack(anchor="w")
+
+        bid = tk.Frame(self.root, padx=10, pady=8)
+        bid.pack(fill=tk.X)
+
+        tk.Label(bid, text="Bid Amount").grid(row=0, column=0)
+        self.bid_var = tk.StringVar()
+        tk.Entry(bid, textvariable=self.bid_var, width=16).grid(row=0, column=1, padx=5)
+        self.bid_btn = tk.Button(bid, text="Place Bid", command=self.place_bid, state=tk.DISABLED)
+        self.bid_btn.grid(row=0, column=2, padx=5)
+
+        self.get_btn = tk.Button(bid, text="Get Status", command=lambda: self.send_line("GET"), state=tk.DISABLED)
+        self.get_btn.grid(row=0, column=3, padx=5)
+
+        self.rep_btn = tk.Button(bid, text="Reputation", command=lambda: self.send_line("REPUTATION"), state=tk.DISABLED)
+        self.rep_btn.grid(row=0, column=4, padx=5)
+
+        log_frame = tk.Frame(self.root, padx=10, pady=8)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.log = tk.Text(log_frame, height=16, wrap=tk.WORD)
+        self.log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar = tk.Scrollbar(log_frame, command=self.log.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log.config(yscrollcommand=scrollbar.set)
+
+    def connect(self):
+        if self.connected:
+            return
+
+        host = self.host_var.get().strip()
+        username = self.username_var.get().strip()
+
+        if not host or not username:
+            messagebox.showerror("Error", "Host and username are required")
+            return
+
+        try:
+            port = int(self.port_var.get().strip())
+        except ValueError:
+            messagebox.showerror("Error", "Port must be a number")
+            return
+
+        try:
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+            raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock = context.wrap_socket(raw_sock, server_hostname=host)
+            self.sock.connect((host, port))
+            self.connected = True
+
+            threading.Thread(target=self._receiver_loop, daemon=True).start()
+
+            self.connect_btn.config(state=tk.DISABLED)
+            self.join_btn.config(state=tk.NORMAL)
+            self.disconnect_btn.config(state=tk.NORMAL)
+            self._append_log(f"Connected to {host}:{port}. Click Join Auction to enter.\n")
+        except Exception as exc:
+            self._append_log(f"Connection failed: {exc}\n")
+            self.connected = False
+            self.sock = None
+
+    def join_auction(self):
+        if not self.connected or not self.sock:
+            return
+
+        username = self.username_var.get().strip()
+        if not username:
+            messagebox.showerror("Error", "Username is required")
+            return
+
+        self.send_line(f"JOIN {username}")
+
+    def disconnect(self):
+        if self.connected and self.sock:
+            try:
+                self.send_line("EXIT")
+                self.sock.close()
+            except Exception:
+                pass
+
+        self.connected = False
+        self.joined = False
+        self.sock = None
+        self.connect_btn.config(state=tk.NORMAL)
+        self.join_btn.config(state=tk.DISABLED)
+        self.disconnect_btn.config(state=tk.DISABLED)
+        self.bid_btn.config(state=tk.DISABLED)
+        self.get_btn.config(state=tk.DISABLED)
+        self.rep_btn.config(state=tk.DISABLED)
+        self._append_log("Disconnected\n")
+
+    def on_close(self):
+        self.disconnect()
+        self.root.destroy()
+
+    def place_bid(self):
+        amount = self.bid_var.get().strip()
+        if not amount:
+            messagebox.showerror("Error", "Enter a bid amount")
+            return
+        self.send_line(f"BID {amount}")
+
+    def send_line(self, text):
+        if not self.connected or not self.sock:
+            return
+        try:
+            self.sock.sendall((text + "\n").encode("utf-8"))
+        except Exception as exc:
+            self._append_log(f"Send error: {exc}\n")
+            self.disconnect()
+
+    def _receiver_loop(self):
+        while self.connected and self.sock:
+            try:
+                data = self.sock.recv(4096)
+                if not data:
+                    break
+                self.msg_queue.put(data.decode("utf-8", errors="replace"))
+            except Exception:
+                break
+
+        if self.connected:
+            self.msg_queue.put("\nConnection closed by server\n")
+        self.connected = False
+
+    def _append_log(self, text):
+        self.log.insert(tk.END, text)
+        self.log.see(tk.END)
+
+    def _set_auction_fields(self, payload):
+        item = payload.get("item")
+        if item:
+            self.item_var.set(f"Item: {item}")
+
+        base_price = payload.get("base_price")
+        if base_price is not None:
+            self.base_price_var.set(f"Base Price: ${float(base_price):.2f}")
+
+        escalation = payload.get("escalation") or payload.get("escalation_left") or payload.get("escalation_window_seconds")
+        if escalation is not None:
+            self.escalation_var.set(f"Escalation: {escalation}s")
+
+        active = payload.get("active")
+        if active is not None:
+            self.auction_state_var.set("Auction: Active" if str(active).lower() in ("1", "true", "yes") else "Auction: Inactive")
+
+        highest = payload.get("highest") or payload.get("bid")
+        leader = payload.get("leader") or payload.get("bidder")
+        if highest is not None:
+            if leader and leader != "None":
+                self.highest_var.set(f"Highest Bid: ${float(highest):.2f} by {leader}")
+            else:
+                self.highest_var.set(f"Highest Bid: ${float(highest):.2f}")
+
+        time_left = payload.get("time_left")
+        if time_left is not None:
+            self.timer_var.set(f"Time Left: {time_left}s")
+
+        participants = payload.get("participants")
+        users = payload.get("users")
+        if participants is not None:
+            if users:
+                self.participants_var.set(f"Participants ({participants}): {users}")
+            else:
+                self.participants_var.set(f"Participants: {participants}")
+
+    def _parse_key_values(self, line):
+        parts = line.strip().split("|")
+        event = parts[0].strip()
+        payload = {}
+        for part in parts[1:]:
+            if "=" in part:
+                key, value = part.split("=", 1)
+                payload[key.strip()] = value.strip()
+        return event, payload
+
+    def _parse_status(self, message):
+        event, payload = self._parse_key_values(message)
+
+        if event == "Enter command: JOIN <username>":
+            self.auction_state_var.set("Auction: Connect to join")
+            return
+
+        if event == "PREJOIN":
+            self._set_auction_fields(payload)
+            self.auction_state_var.set("Auction: Preview (join to participate)")
+            return
+
+        if event == "JOINED":
+            self.joined = True
+            self.join_btn.config(state=tk.DISABLED)
+            self.bid_btn.config(state=tk.NORMAL)
+            self.get_btn.config(state=tk.NORMAL)
+            self.rep_btn.config(state=tk.NORMAL)
+            self._set_auction_fields(payload)
+            self._append_log(f"Joined auction as {payload.get('username', self.username_var.get().strip())}\n")
+            return
+
+        if event in {"AUCTION STARTED", "OK STARTED"}:
+            self._set_auction_fields(payload)
+            self.auction_state_var.set("Auction: Active")
+            if self.joined:
+                self.bid_btn.config(state=tk.NORMAL)
+                self.get_btn.config(state=tk.NORMAL)
+                self.rep_btn.config(state=tk.NORMAL)
+            return
+
+        if event == "BID UPDATE":
+            self._set_auction_fields(payload)
+            status = payload.get("status", "unknown")
+            bidder = payload.get("bidder", "unknown")
+            amount = payload.get("amount", "--")
+            if status == "accepted":
+                self._append_log(f"Accepted bid from {bidder}: ${amount}\n")
+            elif status == "rejected":
+                reason = payload.get("reason", "rejected")
+                self._append_log(f"Rejected bid from {bidder}: ${amount} ({reason})\n")
+            elif status == "tie":
+                self._append_log(f"Tie bid from {bidder}: ${amount}\n")
+            elif status == "escalation_blind":
+                self._append_log(f"Blind escalation bid from {bidder}: {amount}\n")
+            return
+
+        if event == "ESCALATION STARTED":
+            esc_left = payload.get("escalation_left", "--")
+            note = payload.get("note", "Escalation round started")
+            self._append_log(f"Escalation started ({esc_left}s): {note}\n")
+            return
+
+        if event == "ESCALATION RESOLVED":
+            winner = payload.get("winner", "unknown")
+            highest_bid = payload.get("highest_bid", "--")
+            reason = payload.get("reason", "")
+            self._append_log(f"Escalation resolved: winner={winner}, highest=${highest_bid}. {reason}\n")
+            return
+
+        if event == "STATUS":
+            self._set_auction_fields(payload)
+            return
+
+        if event == "AUCTION ENDED":
+            result = payload.get("result")
+            if result == "unsold":
+                self.highest_var.set("Highest Bid: UNSOLD")
+                self.auction_state_var.set("Auction: Ended")
+                reason = payload.get("reason")
+                if reason:
+                    self._append_log(f"AUCTION ENDED | UNSOLD ({reason})\n")
+            else:
+                winner = payload.get("winner", "unknown")
+                bid = payload.get("bid", "--")
+                self.highest_var.set(f"Highest Bid: ${bid} by {winner}")
+                self.auction_state_var.set("Auction: Ended")
+            self.bid_btn.config(state=tk.DISABLED)
+            self.get_btn.config(state=tk.NORMAL if self.joined else tk.DISABLED)
+            self.rep_btn.config(state=tk.NORMAL if self.joined else tk.DISABLED)
+            return
+
+        if event == "REPUTATION":
+            self._append_log(message + "\n")
+            return
+
+        if "UNSOLD" in message:
+            self.highest_var.set("Highest Bid: UNSOLD")
+            self.auction_state_var.set("Auction: Ended")
+
+    def _poll_messages(self):
+        while not self.msg_queue.empty():
+            message = self.msg_queue.get_nowait()
+            for line in message.splitlines():
+                if not line.strip():
+                    continue
+                self._append_log(line + "\n")
+                self._parse_status(line)
+
+        # If connection died from receiver thread, keep controls in sync.
+        if not self.connected and self.sock is not None:
+            self.disconnect()
+
+        self.root.after(100, self._poll_messages)
+
+
+def main():
+    root = tk.Tk()
+    app = AuctionUIClient(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_close)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

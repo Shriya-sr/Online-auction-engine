@@ -236,6 +236,11 @@ class AuctionServer:
                 
                 if command[0].upper() == 'JOIN' and len(command) > 1:
                     potential_username = command[1].strip()
+
+                    if not potential_username:
+                        self._send_client(initial_entry, "ERROR Username cannot be empty\n")
+                        self._send_client(initial_entry, "Enter command: JOIN <username>\n")
+                        continue
                     
                     # Check if username already taken
                     with self.usernames_lock:

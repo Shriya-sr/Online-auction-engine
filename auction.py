@@ -271,12 +271,22 @@ class Auction:
                         "timer_extended": False,
                     }
 
+                previous = self.escalation_blind_bids.get(bidder)
+                if previous is not None and amount == previous[0]:
+                    return {
+                        "accepted": False,
+                        "reason": "Duplicate escalation bid amount from same bidder",
+                        "highest_bid": self.highest_bid,
+                        "highest_bidder": self.highest_bidder,
+                        "tie": True,
+                        "timer_extended": False,
+                    }
+
                 self.reputation[bidder]["valid_bids"] += 1
                 if bidder not in self.first_valid_bid_time:
                     self.first_valid_bid_time[bidder] = now
                 self.bid_order.append((now, bidder, amount))
 
-                previous = self.escalation_blind_bids.get(bidder)
                 if (
                     previous is None
                     or amount > previous[0]
@@ -310,6 +320,16 @@ class Auction:
                 return {
                     "accepted": False,
                     "reason": "Bid lower than current highest",
+                    "highest_bid": self.highest_bid,
+                    "highest_bidder": self.highest_bidder,
+                    "tie": self.escalation_active,
+                    "timer_extended": False,
+                }
+
+            if amount == self.highest_bid and bidder == self.highest_bidder:
+                return {
+                    "accepted": False,
+                    "reason": "Duplicate bid amount from same bidder",
                     "highest_bid": self.highest_bid,
                     "highest_bidder": self.highest_bidder,
                     "tie": self.escalation_active,

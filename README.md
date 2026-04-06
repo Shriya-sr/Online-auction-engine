@@ -150,3 +150,5 @@ Admin portal commands used internally by the GUI:
 - Shriya S R : PES1UG24CS449
 - Simret M Kotian : PES1UG24CS456
 - Ahana S S : PES1UG24CS910
+
+Built as a part of CN Miniproject (Sem 4)

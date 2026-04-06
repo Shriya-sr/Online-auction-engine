@@ -125,21 +125,10 @@ class AuctionServer:
                 )  # Escalation finished
                 self.broadcast(msg)  # Notify all clients
 
-            # Check if auction time has expired
-            state = self.auction.get_state()  # Get auction state
-            now = time.time()  # Current time
-            if (
-                state['auction_active']
-                and state['tie_active']
-                and state['escalation_end_time']
-                and now < state['escalation_end_time']
-            ):
-                time.sleep(0.1)  # Wait if escalation is happening
-                continue
-
-            if state['auction_active'] and state['end_time'] and now >= state['end_time']:
-                # End the auction
-                final_bid, final_bidder = self.auction.end_auction()  # End auction
+            # End the auction only if it is still due at this exact moment.
+            end_result = self.auction.end_auction_if_due(time.time())
+            if end_result is not None:
+                final_bid, final_bidder = end_result
 
                 # Broadcast result
                 if final_bidder:
@@ -149,6 +138,17 @@ class AuctionServer:
 
                 self.broadcast(msg)  # Notify all clients
                 print("Auction ended by timer")  # Log
+                continue
+
+            state = self.auction.get_state()  # Get auction state
+            now = time.time()  # Current time
+            if (
+                state['auction_active']
+                and state['tie_active']
+                and state['escalation_end_time']
+                and now < state['escalation_end_time']
+            ):
+                time.sleep(0.1)  # Wait if escalation is happening
                 continue
 
             time.sleep(0.1)  # Check every 100ms to avoid busy waiting

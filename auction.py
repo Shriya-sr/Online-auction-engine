@@ -509,6 +509,20 @@ class Auction:
         with self.lock:
             return self._end_auction_locked()
 
+    def end_auction_if_due(self, now=None):
+        # End the auction only if the timer is still due at the moment of the check.
+        with self.lock:
+            if not self.auction_active:
+                return None
+
+            current_time = time.time() if now is None else now
+            self._normalize_phase_locked(current_time)
+
+            if self.end_time and current_time >= self.end_time:
+                return self._end_auction_locked()
+
+            return None
+
     def is_active(self):
         # Check if auction is active
         with self.lock:

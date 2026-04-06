@@ -53,6 +53,7 @@ class AuctionUIClient:
         self.item_var = tk.StringVar(value="Item: --")
         self.base_price_var = tk.StringVar(value="Base Price: --")
         self.escalation_var = tk.StringVar(value="Escalation: --")
+        self.anti_sniping_var = tk.StringVar(value="Anti-sniping: --")
         self.auction_state_var = tk.StringVar(value="Auction: --")
         self.participants_var = tk.StringVar(value="Participants: --")
         tk.Label(status, textvariable=self.highest_var, font=("Segoe UI", 11, "bold")).pack(anchor="w")
@@ -60,6 +61,7 @@ class AuctionUIClient:
         tk.Label(status, textvariable=self.item_var, font=("Segoe UI", 10)).pack(anchor="w")
         tk.Label(status, textvariable=self.base_price_var, font=("Segoe UI", 10)).pack(anchor="w")
         tk.Label(status, textvariable=self.escalation_var, font=("Segoe UI", 10)).pack(anchor="w")
+        tk.Label(status, textvariable=self.anti_sniping_var, font=("Segoe UI", 10)).pack(anchor="w")
         tk.Label(status, textvariable=self.participants_var, font=("Segoe UI", 10)).pack(anchor="w")
         tk.Label(status, textvariable=self.auction_state_var, font=("Segoe UI", 10)).pack(anchor="w")
 
@@ -288,6 +290,9 @@ class AuctionUIClient:
             status = payload.get("status", "unknown")
             bidder = payload.get("bidder", "unknown")
             amount = payload.get("amount", "--")
+            if payload.get("anti_sniping_extended") == "1":
+                self.anti_sniping_var.set("Anti-sniping: Extended by 5s")
+                self._append_log("Anti-sniping triggered: auction timer extended\n")
             if status == "accepted":
                 self._append_log(f"Accepted bid from {bidder}: ${amount}\n")
             elif status == "rejected":
@@ -332,6 +337,7 @@ class AuctionUIClient:
             self.bid_btn.config(state=tk.DISABLED)
             self.get_btn.config(state=tk.NORMAL if self.joined else tk.DISABLED)
             self.rep_btn.config(state=tk.NORMAL if self.joined else tk.DISABLED)
+            self.anti_sniping_var.set("Anti-sniping: --")
             return
 
         if event == "REPUTATION":

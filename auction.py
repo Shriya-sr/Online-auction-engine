@@ -1,52 +1,52 @@
-import threading
-import time
-import json
-import os
-
+import threading  # For thread safety (locks)
+import time       # For timing and timestamps
+import json       # For state persistence
+import os         # For file path handling
 
 class Auction:
     def __init__(
         self,
-        item="Auction Item",
-        duration_seconds=60,
-        base_price=0.0,
-        escalation_window_seconds=5,
-        anti_sniping_window_seconds=5,
-        anti_sniping_extension_seconds=5,
-        anti_sniping_max_total_extension_seconds=30,
-        state_file=None,
+        item="Auction Item",  # Item name
+        duration_seconds=60,  # Default auction duration
+        base_price=0.0,  # Starting price
+        escalation_window_seconds=5,  # Escalation round duration
+        anti_sniping_window_seconds=5,  # Anti-sniping window
+        anti_sniping_extension_seconds=5,  # Extension per snipe
+        anti_sniping_max_total_extension_seconds=30,  # Max total extension
+        state_file=None,  # State file path
     ):
-        self.item = item
-        self.base_price = float(base_price)
-        self.highest_bid = 0.0
-        self.highest_bidder = None
-        self.auction_active = False
-        self.end_time = None
-        self.lock = threading.Lock()
+        self.item = item  # Auction item
+        self.base_price = float(base_price)  # Starting price
+        self.highest_bid = 0.0  # Highest bid so far
+        self.highest_bidder = None  # Highest bidder
+        self.auction_active = False  # Is auction running?
+        self.end_time = None  # Auction end timestamp
+        self.lock = threading.Lock()  # Lock for thread safety
 
-        self.escalation_window_seconds = escalation_window_seconds
-        self.anti_sniping_window_seconds = anti_sniping_window_seconds
-        self.anti_sniping_extension_seconds = anti_sniping_extension_seconds
-        self.anti_sniping_max_total_extension_seconds = anti_sniping_max_total_extension_seconds
-        self.original_end_time = None
+        self.escalation_window_seconds = escalation_window_seconds  # Escalation window
+        self.anti_sniping_window_seconds = anti_sniping_window_seconds  # Anti-sniping window
+        self.anti_sniping_extension_seconds = anti_sniping_extension_seconds  # Extension per snipe
+        self.anti_sniping_max_total_extension_seconds = anti_sniping_max_total_extension_seconds  # Max extension
+        self.original_end_time = None  # Original end time
 
-        self.leading_bidders = set()
-        self.escalation_active = False
-        self.escalation_end_time = None
-        self.escalation_blind_bids = {}
+        self.leading_bidders = set()  # Bidders tied for highest
+        self.escalation_active = False  # Is escalation active?
+        self.escalation_end_time = None  # Escalation end timestamp
+        self.escalation_blind_bids = {}  # Blind bids in escalation
 
-        self.bid_order = []
-        self.first_valid_bid_time = {}
-        self.reputation = {}
+        self.bid_order = []  # List of (time, bidder, amount)
+        self.first_valid_bid_time = {}  # First valid bid time per bidder
+        self.reputation = {}  # Reputation stats
 
-        self.default_duration_seconds = duration_seconds
+        self.default_duration_seconds = duration_seconds  # Default duration
         if state_file is None:
-            state_file = os.path.join(os.path.dirname(__file__), "auction_state.json")
-        self.state_file = state_file
+            state_file = os.path.join(os.path.dirname(__file__), "auction_state.json")  # Default state file
+        self.state_file = state_file  # State file path
 
-        self._load_state()
+        self._load_state()  # Load state from file
 
     def _serialize_state(self):
+        # Serialize auction state for saving
         return {
             "item": self.item,
             "base_price": self.base_price,
@@ -72,11 +72,13 @@ class Auction:
         }
 
     def _persist_state(self):
-        payload = self._serialize_state()
+        # Save auction state to file
+        payload = self._serialize_state() # saves auction state to file
         with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump(payload, f)
 
     def _load_state(self):
+        # Load auction state from file if it exists
         if not os.path.exists(self.state_file):
             return
 
@@ -142,6 +144,7 @@ class Auction:
             self.leading_bidders = set()
 
     def start_auction(self, item=None, duration_seconds=None, base_price=None, escalation_window_seconds=None):
+        # Start a new auction
         with self.lock:
             if item:
                 self.item = item
@@ -177,43 +180,48 @@ class Auction:
             }
 
     def _ensure_bidder(self, bidder):
+        # Ensure bidder has a reputation entry
         if bidder not in self.reputation:
             self.reputation[bidder] = {"wins": 0, "valid_bids": 0}
 
     def _reputation_score(self, bidder):
+        # Calculate reputation score (weighted)
         stats = self.reputation.get(bidder, {"wins": 0, "valid_bids": 0})
-        # Weighted score: wins capture reliability, valid bids capture participation.
+        # Weighted: wins = reliability, valid_bids = participation
         return (2.0 * stats["wins"]) + (0.1 * stats["valid_bids"])
 
     def _maybe_extend_timer(self, now):
+        # Extend auction timer if bid is in anti-sniping window
         if self.end_time is None or self.original_end_time is None:
+            return False   # if not valid end time, return false
+
+        time_left = self.end_time - now  #calculate how much time left
+        if time_left > self.anti_sniping_window_seconds:  # if more time than anti_sniping window do nothing
             return False
 
-        time_left = self.end_time - now
-        if time_left > self.anti_sniping_window_seconds:
+        max_end_time = self.original_end_time + self.anti_sniping_max_total_extension_seconds  # calculate max allowed extension (og end time + max allowed extension)
+        if self.end_time >= max_end_time:  #( if we have already crossed the limit, return false)
             return False
 
-        max_end_time = self.original_end_time + self.anti_sniping_max_total_extension_seconds
-        if self.end_time >= max_end_time:
-            return False
-
-        remaining_extension = max_end_time - self.end_time
+        remaining_extension = max_end_time - self.end_time #how much more the auction can be extended
         applied_extension = min(self.anti_sniping_extension_seconds, remaining_extension)
-        if applied_extension <= 0:
+        if applied_extension <= 0:  # if invalid extension do nothing 
             return False
 
-        self.end_time += applied_extension
+        self.end_time += applied_extension  # else, extend auction
         return True
 
     def _start_escalation(self, now):
+        # Start escalation round if not already active
         if not self.escalation_active:
             self.escalation_active = True
             self.escalation_end_time = now + self.escalation_window_seconds
-        # Ensure escalation can complete even if auction was about to end.
+        # Ensure auction end is after escalation end
         if self.end_time < self.escalation_end_time:
             self.end_time = self.escalation_end_time
 
     def _resolve_tie(self, candidates=None):
+        # Resolve a tie among candidates
         if candidates is None:
             candidates = list(self.leading_bidders)
         else:
@@ -222,21 +230,22 @@ class Auction:
         if not candidates:
             return None, "No tied bidders available for resolution"
 
-        scores = {bidder: self._reputation_score(bidder) for bidder in candidates}
-        best_score = max(scores.values())
-        best_bidders = [b for b in candidates if scores[b] == best_score]
+        scores = {bidder: self._reputation_score(bidder) for bidder in candidates} #get the reputation score of each 
+        best_score = max(scores.values()) #get best rep score
+        best_bidders = [b for b in candidates if scores[b] == best_score] # best bidder
 
         if len(best_bidders) == 1:
-            winner = best_bidders[0]
+            winner = best_bidders[0] #if there only one => declare him winner
             return winner, f"Tie resolved by reputation score ({best_score:.2f})"
 
         winner = min(
-            best_bidders,
+            best_bidders,  # if tie, see the time 
             key=lambda b: self.first_valid_bid_time.get(b, float("inf")),
         )
         return winner, "Tie resolved by FCFS among equal-reputation bidders"
 
     def _finalize_escalation_locked(self, now, force=False):
+        # Finalize escalation round if due
         if not self.escalation_active:
             return None
 
@@ -279,20 +288,22 @@ class Auction:
         }
 
     def _normalize_phase_locked(self, now):
+        # Normalize auction phase (handle escalation timing)
         if not self.auction_active:
             return
 
         if self.escalation_active:
-            # Finalize escalation as soon as its window ends.
+            # Finalize escalation if window ended
             self._finalize_escalation_locked(now, force=False)
 
         if self.escalation_active and self.escalation_end_time and self.end_time:
-            # Keep auction end aligned with escalation end while escalation is active.
+            # Align auction end with escalation end
             if self.end_time < self.escalation_end_time:
                 self.end_time = self.escalation_end_time
                 self._persist_state()
 
     def _end_auction_locked(self):
+        # End the auction and update winner's reputation
         if self.escalation_active:
             self._finalize_escalation_locked(time.time(), force=True)
 
@@ -306,6 +317,7 @@ class Auction:
         return self.highest_bid, self.highest_bidder
 
     def place_bid(self, amount, bidder):
+        # Place a bid for a bidder
         with self.lock:
             if not self.auction_active:
                 return {
@@ -320,6 +332,7 @@ class Auction:
             now = time.time()
             self._normalize_phase_locked(now)
 
+            # chcek if auction has ended already 
             if self.end_time and now >= self.end_time:
                 self._end_auction_locked()
                 return {
@@ -331,11 +344,13 @@ class Auction:
                     "timer_extended": False,
                 }
 
-            self._ensure_bidder(bidder)
+            self._ensure_bidder(bidder)  # give the bidder reputation (since he is not already there)
 
+            # Escalation round logic
             if self.escalation_active:
                 if amount <= self.highest_bid:
                     return {
+                        # case where bid is lesser than highest_bid
                         "accepted": False,
                         "reason": "Escalation round requires a bid higher than current highest",
                         "highest_bid": self.highest_bid,
@@ -344,10 +359,10 @@ class Auction:
                         "timer_extended": False,
                     }
 
-                previous = self.escalation_blind_bids.get(bidder)
+                previous = self.escalation_blind_bids.get(bidder) 
                 if previous is not None and amount == previous[0]:
                     return {
-                        "accepted": False,
+                        "accepted": False,          #if bidder bids same amount, reject it
                         "reason": "Duplicate escalation bid amount from same bidder",
                         "highest_bid": self.highest_bid,
                         "highest_bidder": self.highest_bidder,
@@ -355,9 +370,9 @@ class Auction:
                         "timer_extended": False,
                     }
 
-                self.reputation[bidder]["valid_bids"] += 1
+                self.reputation[bidder]["valid_bids"] += 1  # increasing count in valid bids
                 if bidder not in self.first_valid_bid_time:
-                    self.first_valid_bid_time[bidder] = now
+                    self.first_valid_bid_time[bidder] = now   # record first valid bid 
                 self.bid_order.append((now, bidder, amount))
 
                 if (
@@ -379,7 +394,10 @@ class Auction:
                     "timer_extended": False,
                 }
 
-            if self.highest_bid == 0.0 and amount < self.base_price:
+            # Normal bid logic
+
+
+            if self.highest_bid == 0.0 and amount < self.base_price:  #handle 0 bid and less than base price case
                 return {
                     "accepted": False,
                     "reason": f"Bid below base price ${self.base_price:.2f}",
@@ -389,7 +407,7 @@ class Auction:
                     "timer_extended": False,
                 }
 
-            if amount < self.highest_bid:
+            if amount < self.highest_bid:   # amount less than highest bid case
                 return {
                     "accepted": False,
                     "reason": "Bid lower than current highest",
@@ -399,7 +417,7 @@ class Auction:
                     "timer_extended": False,
                 }
 
-            if amount == self.highest_bid and bidder == self.highest_bidder:
+            if amount == self.highest_bid and bidder == self.highest_bidder:   #duplicate bid from same bidder 
                 return {
                     "accepted": False,
                     "reason": "Duplicate bid amount from same bidder",
@@ -416,7 +434,7 @@ class Auction:
 
             timer_extended = self._maybe_extend_timer(now)
 
-            if amount > self.highest_bid:
+            if amount > self.highest_bid:  # update highest bidder and bid amount if amount is greater
                 self.highest_bid = amount
                 self.highest_bidder = bidder
                 self.leading_bidders = {bidder}
@@ -431,6 +449,7 @@ class Auction:
                     "timer_extended": timer_extended,
                 }
 
+            # Tie at highest bid, start escalation
             escalation_started = not self.escalation_active
             if self.highest_bidder:
                 self.leading_bidders.add(self.highest_bidder)
@@ -450,6 +469,7 @@ class Auction:
             }
 
     def finalize_escalation_if_due(self):
+        # Finalize escalation if its window has ended
         with self.lock:
             if not self.auction_active or not self.escalation_active:
                 return None
@@ -458,6 +478,7 @@ class Auction:
             return self._finalize_escalation_locked(now, force=False)
 
     def get_state(self):
+        # Get current auction state (for server/client)
         with self.lock:
             return {
                 "highest_bid": self.highest_bid,
@@ -472,6 +493,7 @@ class Auction:
             }
 
     def get_reputation_snapshot(self):
+        # Get a snapshot of all bidders' reputations
         with self.lock:
             snapshot = {}
             for bidder, stats in self.reputation.items():
@@ -483,9 +505,11 @@ class Auction:
             return snapshot
 
     def end_auction(self):
+        # End the auction (public method)
         with self.lock:
             return self._end_auction_locked()
 
     def is_active(self):
+        # Check if auction is active
         with self.lock:
             return self.auction_active

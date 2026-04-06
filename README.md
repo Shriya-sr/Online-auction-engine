@@ -145,3 +145,8 @@ Admin portal commands used internally by the GUI:
 - If the server fails to start, confirm that `server.crt` and `server.key` exist.
 - If the GUI does not open, verify that your Python installation includes Tk support.
 - If a client cannot connect, check that the server is already running and that the port numbers have not been changed.
+
+## Contributors
+- Shriya S R : PES1UG24CS449
+- Simret M Kotian : PES1UG24CS456
+- Ahana S S : PES1UG24CS910

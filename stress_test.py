@@ -4,6 +4,10 @@ root = r"D:\Desktop\PES\SEM4\CN\Lab project\auction_engine_done"
 oa_dir = os.path.join(root, "OA")
 sys.path.insert(0, oa_dir)
 
+#root = r"C:\1\Shriya\PES\4th Semester\My CN\CN jackfruit\Online-auction-engine"
+#oa_dir = root
+#sys.path.insert(0, oa_dir)
+
 from server import AuctionServer
 
 HOST = "localhost"
@@ -11,7 +15,9 @@ PORT = 5610
 ADMIN_PORT = 5611
 CERT = os.path.join(oa_dir, "server.crt")
 
-def make_ctx():
+def make_ctx(): #This function creates an SSL context that will be used by the client to securely connect to the server. 
+    #It loads the server's certificate for verification and configures the context to 
+    # require certificate validation without checking the hostname (since we're connecting to localhost).
     ctx = ssl.create_default_context(cafile=CERT)
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_REQUIRED
@@ -23,7 +29,7 @@ class Client:
         self.sock = None
         self.buf = ""
 
-    def connect_and_join(self):
+    def connect_and_join(self): #It creates a TCP socket, wraps it in an SSL context for secure communication, and connects to the server.
         raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock = make_ctx().wrap_socket(raw, server_hostname=HOST)
         self.sock.settimeout(3.0)
@@ -32,10 +38,11 @@ class Client:
         self.send(f"JOIN {self.name}")
         self._read_until_any(["JOINED|"])
 
-    def send(self, line):
+    def send(self, line): #Sends a command to server with newline.
         self.sock.sendall((line + "\n").encode("utf-8"))
 
-    def _readline(self, timeout=3.0):
+    def _readline(self, timeout=3.0): #Reads a line of text from the server, waiting up to the specified timeout. 
+        #Safely handles partial reads and socket timeouts, returning complete lines of text as they are received.
         end = time.time() + timeout
         while time.time() < end:
             if "\n" in self.buf:
@@ -50,7 +57,7 @@ class Client:
                 continue
         return ""
 
-    def _read_until_any(self, needles, timeout=5.0):
+    def _read_until_any(self, needles, timeout=5.0): #Reads lines from the server until it finds one that contains any of the specified needles (substrings) or until the timeout expires.
         end = time.time() + timeout
         while time.time() < end:
             line = self._readline(timeout=0.5)
@@ -60,7 +67,8 @@ class Client:
                 return line
         return ""
 
-    def bid_and_wait(self, amount):
+    def bid_and_wait(self, amount): #Sends a BID command to the server with the specified amount and waits for a response indicating whether the bid was accepted or rejected. 
+         #It measures the time taken from sending the bid to receiving a response that confirms the bid
         t0 = time.perf_counter()
         self.send(f"BID {amount}")
         end = time.time() + 5.0
@@ -72,7 +80,8 @@ class Client:
                 return (time.perf_counter() - t0) * 1000.0
         return None
 
-    def send_and_wait_any(self, cmd, tokens):
+    def send_and_wait_any(self, cmd, tokens): #Sends a command to the server and waits for any response that contains one of the specified tokens. 
+         #It measures the time taken from sending the command to receiving a response.
         t0 = time.perf_counter()
         self.send(cmd)
         end = time.time() + 5.0
@@ -94,6 +103,8 @@ class Client:
         except Exception:
             pass
 
+#This function connects to the admin port, sends a control command, 
+# waits for confirmation, and returns the server’s reply.
 def admin_cmd(cmd, wait_tokens=("OK", "STATUS", "ERROR"), timeout=5.0):
     raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s = make_ctx().wrap_socket(raw, server_hostname=HOST)
@@ -121,10 +132,12 @@ def admin_cmd(cmd, wait_tokens=("OK", "STATUS", "ERROR"), timeout=5.0):
     s.close()
     return ""
 
-def run_parallel_bids(clients, amounts):
+def run_parallel_bids(clients, amounts): #This function takes a list of client objects and corresponding bid amounts, and runs them in parallel using threads. 
+    #It collects the latencies of each bid operation and returns them along with the total elapsed time for all bids to complete.
     lats = []
     lock = threading.Lock()
 
+#It launches many clients to bid concurrently, record each response time, and measure total execution time.
     def worker(c, amt):
         lat = c.bid_and_wait(amt)
         with lock:
@@ -142,6 +155,8 @@ def run_parallel_bids(clients, amounts):
     elapsed = time.perf_counter() - t0
     return lats, elapsed
 
+#This runs the full test like (start auction -> clients join -> clients bid -> stop auction) 
+# and collects latency and throughput metrics for analysis.
 def scenario(tag, nclients, mode):
     admin_cmd("START 40 100 5 PerfItem")
     clients = [Client(f"{tag}_{i}") for i in range(nclients)]

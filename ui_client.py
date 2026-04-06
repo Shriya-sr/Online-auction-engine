@@ -7,7 +7,7 @@ from tkinter import messagebox
 
 
 class AuctionUIClient:
-    def __init__(self, root):
+    def __init__(self, root): #The constructor initializes the AuctionUIClient class, which represents the client application for participating in the auction.
         self.root = root
         self.root.title("Auction Bidder")
         self.root.geometry("700x460")
@@ -20,7 +20,7 @@ class AuctionUIClient:
         self._build_ui()
         self.root.after(100, self._poll_messages)
 
-    def _build_ui(self):
+    def _build_ui(self): #This constructs the GUI using Tkinter.
         top = tk.Frame(self.root, padx=10, pady=10)
         top.pack(fill=tk.X)
 
@@ -87,19 +87,21 @@ class AuctionUIClient:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.log.config(yscrollcommand=scrollbar.set)
 
-    def connect(self):
+    def connect(self): #It attempts to establish a secure SSL connection to the auction server using the host and port specified in the input fields. 
+        #It also validates the input fields and handles any connection errors by displaying an error message in the log. 
+        #If the connection is successful, it starts a separate thread to listen for incoming messages from the server and updates the GUI state accordingly.
         if self.connected:
             return
 
         host = self.host_var.get().strip()
         username = self.username_var.get().strip()
 
-        if not host or not username:
+        if not host or not username: #Validate that the host and username fields are not empty. If either is empty, show an error message and return without attempting to connect.
             messagebox.showerror("Error", "Host and username are required")
             return
 
         try:
-            port = int(self.port_var.get().strip())
+            port = int(self.port_var.get().strip()) #Validate that the port field contains a valid integer. If it cannot be converted to an integer, show an error message and return without attempting to connect.
         except ValueError:
             messagebox.showerror("Error", "Port must be a number")
             return
@@ -109,12 +111,12 @@ class AuctionUIClient:
             context.load_verify_locations(cafile='server.crt')
             context.check_hostname = False
 
-            raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #Create a raw TCP socket using the AF_INET address family and SOCK_STREAM socket type, which is suitable for TCP connections.
             self.sock = context.wrap_socket(raw_sock, server_hostname=host)
             self.sock.connect((host, port))
             self.connected = True
 
-            threading.Thread(target=self._receiver_loop, daemon=True).start()
+            threading.Thread(target=self._receiver_loop, daemon=True).start() #Start a new thread to run the _receiver_loop method, which continuously listens for incoming messages from the server. The thread is marked as a daemon so that it will automatically exit when the main program exits.
 
             self.connect_btn.config(state=tk.DISABLED)
             self.join_btn.config(state=tk.NORMAL)
@@ -134,12 +136,14 @@ class AuctionUIClient:
             messagebox.showerror("Error", "Username is required")
             return
 
-        self.send_line(f"JOIN {username}")
+        self.send_line(f"JOIN {username}") #Send a JOIN command to the server with the specified username to attempt to join the auction. 
+        #The server will respond with a message indicating whether the join was successful or if there was an error. The client will then update its state and GUI based on the server's response, which is processed in the _receiver_loop method.
 
-    def disconnect(self):
+    def disconnect(self): #This method is responsible for disconnecting from the auction server. 
+        #It sends an EXIT command to the server to gracefully close the connection, and then it updates the GUI state to reflect that the client is no longer connected.
         if self.connected and self.sock:
             try:
-                self.send_line("EXIT")
+                self.send_line("EXIT") #Send an EXIT command to the server to inform it that the client is disconnecting.
                 self.sock.close()
             except Exception:
                 pass
@@ -155,18 +159,21 @@ class AuctionUIClient:
         self.rep_btn.config(state=tk.DISABLED)
         self._append_log("Disconnected\n")
 
-    def on_close(self):
+    def on_close(self): #It ensures that the client properly disconnects from the server before the application exits. It calls the disconnect method to cleanly close the connection and then destroys the main application window to exit the program.
         self.disconnect()
         self.root.destroy()
 
-    def place_bid(self):
+    def place_bid(self): #It retrieves the bid amount from the input field, validates that it is not empty, and then sends a BID command to the server with the specified amount.
         amount = self.bid_var.get().strip()
         if not amount:
             messagebox.showerror("Error", "Enter a bid amount")
             return
         self.send_line(f"BID {amount}")
 
-    def send_line(self, text):
+    def send_line(self, text): #This method is a helper function to send a line of text to the server. 
+        #It checks if the client is currently connected and if the socket exists.
+        # If the client is connected, it attempts to send the specified text followed by a newline character to the server using the SSL socket. 
+        #If an error occurs during sending (e.g., if the connection is lost), it logs the error message and calls the disconnect method to update the client's state accordingly.
         if not self.connected or not self.sock:
             return
         try:
@@ -193,12 +200,12 @@ class AuctionUIClient:
         self.log.insert(tk.END, text)
         self.log.see(tk.END)
 
-    def _set_auction_fields(self, payload):
-        item = payload.get("item")
+    def _set_auction_fields(self, payload): #Just a helper method to update the auction status fields in the GUI.
+        item = payload.get("item") #Looks for the item in the payload (like laptop) and then update the UI label.
         if item:
             self.item_var.set(f"Item: {item}")
 
-        base_price = payload.get("base_price")
+        base_price = payload.get("base_price") #Gets the base price of the item.
         if base_price is not None:
             self.base_price_var.set(f"Base Price: ${float(base_price):.2f}")
 
@@ -206,31 +213,33 @@ class AuctionUIClient:
         if escalation is not None:
             self.escalation_var.set(f"Escalation: {escalation}s")
 
-        active = payload.get("active")
+        active = payload.get("active") #Show if the auction is active or not based on the "active" field in the payload.
         if active is not None:
             self.auction_state_var.set("Auction: Active" if str(active).lower() in ("1", "true", "yes") else "Auction: Inactive")
 
-        highest = payload.get("highest") or payload.get("bid")
-        leader = payload.get("leader") or payload.get("bidder")
-        if highest is not None:
+        highest = payload.get("highest") or payload.get("bid") #Get the highest bid amount from the payload.
+        leader = payload.get("leader") or payload.get("bidder") #Get the current highest bidder's username from the payload.
+        if highest is not None: #If there is a highest bid amount, update the highest bid label in the GUI. If there is also a leader (highest bidder), include their name in the label. Otherwise, just show the highest bid amount without a bidder name.
             if leader and leader != "None":
                 self.highest_var.set(f"Highest Bid: ${float(highest):.2f} by {leader}")
             else:
                 self.highest_var.set(f"Highest Bid: ${float(highest):.2f}")
 
-        time_left = payload.get("time_left")
+        time_left = payload.get("time_left") #Get the time left for the auction from the payload.
         if time_left is not None:
             self.timer_var.set(f"Time Left: {time_left}s")
 
-        participants = payload.get("participants")
-        users = payload.get("users")
-        if participants is not None:
+        participants = payload.get("participants") #Get the number of participants in the auction from the payload.
+        users = payload.get("users") #Get the list of users in the auction from the payload.
+        if participants is not None: 
             if users:
                 self.participants_var.set(f"Participants ({participants}): {users}")
             else:
                 self.participants_var.set(f"Participants: {participants}")
 
-    def _parse_key_values(self, line):
+#I am doing this to translate raw server messages into user-friendly updates in the GUI. 
+# The server sends messages in a key-value format and this formats it properly.
+    def _parse_key_values(self, line): #This method takes a line of text and parses it into an event type and a dictionary of key-value pairs.
         parts = line.strip().split("|")
         event = parts[0].strip()
         payload = {}
@@ -240,6 +249,9 @@ class AuctionUIClient:
                 payload[key.strip()] = value.strip()
         return event, payload
 
+#This function is the decision-maker of my client.
+# It reads messages coming from the server, figures out what type of event happened
+#And then it updates the GUI and logs accordingly.
     def _parse_status(self, message):
         event, payload = self._parse_key_values(message)
 
@@ -330,6 +342,7 @@ class AuctionUIClient:
             self.highest_var.set("Highest Bid: UNSOLD")
             self.auction_state_var.set("Auction: Ended")
 
+#This function checks if any new messages came from the server and processes them one by one.
     def _poll_messages(self):
         while not self.msg_queue.empty():
             message = self.msg_queue.get_nowait()

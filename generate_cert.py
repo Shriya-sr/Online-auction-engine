@@ -89,11 +89,11 @@ cert = cert.not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days
 cert = cert.sign(key, hashes.SHA256())                # Sign with private key (SHA256)
 # above => certificate data is hashed using SHA256 and hash is signed using our private key
 
-# Write private key to file (PEM, unencrypted) #server.crt shouldn't be shared
+# Write private key to file (PEM, unencrypted) #server.key shouldn't be shared!
 with open("server.key", "wb") as f:
   f.write(key.private_bytes(
-    encoding=serialization.Encoding.PEM,  # PEM format
-    format=serialization.PrivateFormat.TraditionalOpenSSL,  # OpenSSL format
+    encoding=serialization.Encoding.PEM,  # PEM format - base64 (outer look)
+    format=serialization.PrivateFormat.TraditionalOpenSSL,  # OpenSSL format(internally structured)
     encryption_algorithm=serialization.NoEncryption(),      # No encryption
   ))
 
